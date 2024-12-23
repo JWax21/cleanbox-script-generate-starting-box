@@ -35,7 +35,6 @@ async def build_starting_box(
                 context["subscription_type"] = customer_document.get("subscription_type")
                 print(f"Updated context: {context}")
 
-                print(f"Customer found")
             else:
                 print(f"No customer found with phone number: {phone}")
         except Exception as e:
