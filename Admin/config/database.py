@@ -1,16 +1,15 @@
+
 import os
 import asyncio
 from motor.motor_asyncio import AsyncIOMotorClient
 from pymongo.server_api import ServerApi
 
-# Replace the placeholder with your Atlas connection string
-connection_string = os.environ['MONGO_BOXES_URI']
-uri = connection_string
+connection_string = os.environ.get('MONGO_BOXES_URI')
+if not connection_string:
+    raise ValueError("MONGO_BOXES_URI environment variable is not set")
 
-# Set the Stable API version when creating a new client
-client = AsyncIOMotorClient(uri, server_api=ServerApi('1'))
+client = AsyncIOMotorClient(connection_string, server_api=ServerApi('1'))
 
-# DEFINE COLLECTIONS
 boxes_db = client["Boxes"]
 
 all_snacks_collection = boxes_db["snacks"]
