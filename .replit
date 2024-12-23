@@ -1,5 +1,5 @@
 
-run = ["python", "-m", "uvicorn", "Admin.main:app", "--host", "0.0.0.0", "--port", "8080"]
+run = ["python", "-m", "uvicorn", "admin.main:app", "--host", "0.0.0.0", "--port", "8080"]
 modules = ["python-3.13:v20-20230723-3c78c02"]
 
 [nix]
