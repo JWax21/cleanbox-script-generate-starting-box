@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from routes import build_starting_box_routes
+from Admin.routes import build_starting_box_routes
 
 # Initialize FastAPI app
 app = FastAPI()
