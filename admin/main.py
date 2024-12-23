@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.responses import RedirectResponse
 from fastapi.middleware.cors import CORSMiddleware
 
-from Admin.routes import build_starting_box_routes
+from admin.routes.build_starting_box_routes import router as build_starting_box_router
 
 # Initialize FastAPI app
 app = FastAPI()
@@ -17,7 +17,7 @@ app.add_middleware(
 )
 
 # Include box-related routes
-app.include_router(build_starting_box_routes.router, prefix="/api/v1")
+app.include_router(build_starting_box_router, prefix="/api/v1")
 
 
 # Root endpoint to redirect to Swagger UI
