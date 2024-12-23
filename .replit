@@ -1,8 +1,13 @@
-modules = ["python-3.12", "python-base-3.13"]
+
+run = ["python", "-m", "uvicorn", "Admin.main:app", "--host", "0.0.0.0", "--port", "8080"]
+modules = ["python-3.13:v20-20230723-3c78c02"]
 
 [nix]
 channel = "stable-24_05"
 
+[env]
+PYTHONPATH = "${PYTHONPATH}:${REPL_HOME}"
+
 [[ports]]
-localPort = 8000
+localPort = 8080
 externalPort = 80
