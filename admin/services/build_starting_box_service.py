@@ -453,17 +453,17 @@ async def build_starting_box(
 
 
 # ======= 3. COMPLETE BOX WITH REMAINING CATEGORIES
-        
+
+        # ADD REMAINING CATEGORIES
         remaining_categories = [
             cat for cat in grouped_snacks if cat not in transformed_staples and cat not in (context["category_dislikes"] or [])
         ]
-
+        
         count_to_fill = context["subscription_type"] - len(context["month_start_box"])
-
-        # Process the remaining categories
+        
         process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context)
 
-        # Check if the subscription type matches the length of the month_start_box
+        # CHECK: BOX IS FULLL
         if len(context["month_start_box"]) != context["subscription_type"]:
             # Recalculate count_to_fill and call the function again
             count_to_fill = context["subscription_type"] - len(context["month_start_box"])
@@ -476,6 +476,7 @@ async def build_starting_box(
 
 
 # ========================================================================================================================== SAVE
+            
     async def save_month_start_box():
         print(f'Saving Box: {context["month_start_box"]}')
         date = datetime.now() if new_signup else datetime.now() + timedelta(days=30)
