@@ -31,7 +31,7 @@ async def build_starting_box(
                 {"phone": phone},
                 {"_id": 0, 
                  "allergens": 1, 
-                 "category_dislikes": 1, 
+                 "dislikes": 1, 
                  "staples": 1, 
                  "vetoedFlavors": 1,
                  "prioritySetting": 1,
