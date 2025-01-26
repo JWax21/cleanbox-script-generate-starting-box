@@ -5,7 +5,7 @@ from pprint import pprint
 from collections import Counter
 
 async def build_starting_box(
-    phone: str,
+    customerID: str,
     new_signup: bool,
     monthly_draft_box_collection,
     all_customers_collection,
@@ -25,10 +25,10 @@ async def build_starting_box(
 
 # ========================================================================================================================== PRE: GET CUSTOMER INFO 
     
-    async def get_customer_by_phone(phone):
+    async def get_customer_by_customerID(customerID):
         try:
             customer_document = await all_customers_collection.find_one(
-                {"phone": phone},
+                {"customerID": customerID},
                 {"_id": 0, 
                  "allergens": 1, 
                  "dislikes": 1, 
@@ -51,7 +51,7 @@ async def build_starting_box(
                 print("\n")
 
             else:
-                print(f"No customer found with phone number: {phone}")
+                print(f"No customer found with ID: {customerID}")
         except Exception as e:
             print(f"An error occurred while retrieving the customer: {e}")
 
@@ -151,16 +151,81 @@ async def build_starting_box(
 
 # ============================================================================================ PREPARE: ACTUAL COUNT FOR STAPLES
     
-    def transform_staples_object(staples, subscription_type):
-        value_mapping = {
+    def transform_staples_object(staples, subscription_type, category_dislikes):
+        # COUNTS
+        staples_count = len(staples)
+        dislikes_count = len(category_dislikes)
+        grey_categories = 10 - staples_count - dislikes_count
+
+        if grey_categories < 0:
+            raise ValueError("Invalid inputs: staples and category dislikes exceed available categories.")
+
+        print(f"Grey: {grey_categories}")
+
+        # Score placeholders for base mappings
+        score_placeholders = {
             20: {"many": 5, "a few": 3, "one": 1},
             16: {"many": 4, "a few": 2, "one": 1},
             12: {"many": 3, "a few": 2, "one": 1},
         }
+
+        # Get the base mapping for the given subscription type
+        base_staples_mapping = score_placeholders.get(subscription_type)
+        if not base_staples_mapping:
+            raise ValueError(f"Unsupported subscription type: {subscription_type}")
+
+        # Calculate base staples score
+        base_staples_score = sum(base_staples_mapping[v] for v in staples.values() if v in base_staples_mapping)
+
+        # Determine the value mapping based on grey categories and subscription type
+        adjustment_factor = (subscription_type - base_staples_score) / grey_categories if grey_categories > 0 else 0
+
+        if adjustment_factor > 2:
+            mapping_type = "heavy_mapping"
+            value_mapping = {
+                20: {"many": 6, "a few": 4, "one": 1},
+                16: {"many": 5, "a few": 3, "one": 1},
+                12: {"many": 4, "a few": 3, "one": 1},
+            }
+        elif 1 < adjustment_factor <= 2:
+            mapping_type = "base_mapping"
+            value_mapping = score_placeholders
+        else:
+            mapping_type = "light_mapping"
+            value_mapping = {
+                20: {"many": 4, "a few": 2, "one": 1},
+                16: {"many": 3, "a few": 2, "one": 1},
+                12: {"many": 3, "a few": 2, "one": 1},
+            }
+
+        print(f"Using {mapping_type} for value mapping.")
+
+        # Get the mapping for the given subscription type
         mapping = value_mapping.get(subscription_type)
         if not mapping:
             raise ValueError(f"Unsupported subscription type: {subscription_type}")
-        return {k: mapping[v] for k, v in staples.items() if v in mapping}
+
+        # Apply the mapping to the staples
+        transformed_staples = {k: mapping[v] for k, v in staples.items() if v in mapping}
+
+        # Calculate the total value after transformation
+        total_value = sum(transformed_staples.values())
+
+        # Adjust values if the total exceeds the subscription type
+        if total_value > subscription_type:
+            print(f"Total value ({total_value}) exceeds subscription type ({subscription_type}). Adjusting...")
+
+            # Sort items by their values in descending order to target the highest value first
+            sorted_items = sorted(transformed_staples.items(), key=lambda item: item[1], reverse=True)
+
+            for key, value in sorted_items:
+                if value > 1:  # Ensure the value doesn't drop below 1
+                    transformed_staples[key] -= 1
+                    total_value -= 1  # Update total value
+                    if total_value <= subscription_type:
+                        break  # Stop once the total is adjusted
+
+        return transformed_staples
 
 # ============================================================================================ 3. ADD SNACKS
 
@@ -193,13 +258,9 @@ async def build_starting_box(
         
         # Extract unique values for secondary categories, forms, brands, and flavor tags
         secondary_category_values = list(set(snack["secondaryCategory"] for snack in grouped_snacks))
-        print("RUNNING")
         form_values = list(set(snack["form"] for snack in grouped_snacks))
-        print("4. RUNNING")
         brand_values = list(set(snack["brand"] for snack in grouped_snacks))
-        print("RUNNING")
         flavor_tag_values = list(set(tag for snack in grouped_snacks for tag in snack.get("flavorTags", [])))
-        print("6. RUNNING")
 
         # Print the unique values
         print("Unique Secondary Categories:", secondary_category_values)
@@ -419,7 +480,7 @@ async def build_starting_box(
         print(f'EXTEND 1: {context["month_start_box"]}')
         print("\n")
         
-        transformed_staples = transform_staples_object(context["staples"], context["subscription_type"])
+        transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"])
         
         # Fetch the safe snacks
         safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"])
@@ -484,20 +545,20 @@ async def build_starting_box(
 
         
         document = {
-            "phone": phone,
+            "customerID": customerID,
             "snacks": context["month_start_box"],
             "month": month_as_int,
             "size": context["subscription_type"]
         }
         if context["month_start_box"]:
             await monthly_draft_box_collection.insert_one(document)
-            print(f"Box saved successfully for phone: {phone}")
+            print(f"Box saved successfully for customer: {customerID}")
         else:
             print("Box is empty. Nothing to save.")
 
 # ========================================================================================================================== RUN
     
-    await get_customer_by_phone(phone)
+    await get_customer_by_customerID(customerID)
     await build_month_start_box()
     await save_month_start_box()
     

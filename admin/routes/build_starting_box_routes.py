@@ -10,17 +10,17 @@ from admin.config.database import (
 router = APIRouter()
 
 class BuildStartingBoxRequest(BaseModel):
-    phone: str
+    customerID: str
     new_signup: bool
 
 @router.post("/build-starting-box")
 async def build_starting_box_endpoint(
     request: BuildStartingBoxRequest  # Use the model to parse the body
 ):
-    print(f"Request received for /build-starting-box with phone: {request.phone} and new_signup: {request.new_signup}")
+    print(f"Request received for /build-starting-box with ID: {request.customerID} and new_signup: {request.new_signup}")
     try:
         result = await build_starting_box(
-            phone=request.phone, 
+            customerID=request.customerID, 
             new_signup=request.new_signup,     
             monthly_draft_box_collection=monthly_draft_box_collection,
             all_customers_collection=all_customers_collection,
