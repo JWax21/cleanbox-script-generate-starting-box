@@ -361,7 +361,8 @@ async def build_starting_box(
             {
                 "SnackID": snack["SnackID"],
                 "primaryCategory": category,
-                "count": 1
+                "count": 1,
+                "premium": snack["premium"],
             }
             for snack in next_snacks
         )
