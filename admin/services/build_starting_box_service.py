@@ -7,6 +7,8 @@ from collections import Counter
 async def build_starting_box(
     customerID: str,
     new_signup: bool,
+    is_reset_box: bool,
+    reset_total: int,
     monthly_draft_box_collection,
     all_customers_collection,
     all_snacks_collection,
@@ -25,18 +27,20 @@ async def build_starting_box(
 
 # ========================================================================================================================== PRE: GET CUSTOMER INFO 
     
-    async def get_customer_by_customerID(customerID):
+    async def get_customer_by_customerID(customerID, is_reset_box, reset_total):
         try:
             customer_document = await all_customers_collection.find_one(
                 {"customerID": customerID},
-                {"_id": 0, 
-                 "allergens": 1, 
-                 "dislikes": 1, 
-                 "staples": 1, 
-                 "vetoedFlavors": 1,
-                 "prioritySetting": 1,
-                 "repeatMonthly": 1, 
-                 "subscription_type": 1}
+                {
+                    "_id": 0, 
+                    "allergens": 1, 
+                    "dislikes": 1, 
+                    "staples": 1, 
+                    "vetoedFlavors": 1,
+                    "prioritySetting": 1,
+                    "repeatMonthly": 1, 
+                    "subscription_type": 1
+                }
             )
 
             if customer_document:
@@ -45,8 +49,14 @@ async def build_starting_box(
                 context["staples"] = customer_document.get("staples")
                 context["category_dislikes"] = customer_document.get("dislikes")
                 context["repeat_monthly"] = customer_document.get("repeatMonthly")
-                context["subscription_type"] = customer_document.get("subscription_type")
                 context["priority_setting"] = customer_document.get("prioritySetting")
+
+                # BASE BOX OR RESET BOX
+                if is_reset_box:
+                    context["subscription_type"] = reset_total
+                else:
+                    context["subscription_type"] = customer_document.get("subscription_type")
+
                 print(f"CONTEXT: {context}")
                 print("\n")
 
@@ -541,10 +551,9 @@ async def build_starting_box(
             
     async def save_month_start_box():
         print(f'Saving Box: {context["month_start_box"]}')
-        date = datetime.now() if new_signup else datetime.now() + timedelta(days=30)
+        date = datetime.now() if new_signup or is_reset_box else datetime.now() + timedelta(days=30)
         month_as_int = int(date.strftime("%m%y"))
 
-        
         document = {
             "customerID": customerID,
             "snacks": context["month_start_box"],
@@ -559,7 +568,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== RUN
     
-    await get_customer_by_customerID(customerID)
+    await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box()
     await save_month_start_box()
     
