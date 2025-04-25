@@ -7,6 +7,7 @@ from collections import Counter
 async def build_starting_box(
     customerID: str,
     new_signup: bool,
+    off_cycle: bool,
     is_reset_box: bool,
     reset_total: int,
     monthly_draft_box_collection,
@@ -67,7 +68,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== 1. FILTER SNACKS
     
-    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None):
+    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, off_cycle=False):
         try:
             print("FILTERING SNACKS")
             # Initialize query conditions
@@ -114,6 +115,11 @@ async def build_starting_box(
                 # Add vetoed flavors condition to the query
                 query_conditions["flavorTags"] = {"$nin": formatted_flavors}
 
+            # Filter by off-cycle if provided
+            if off_cycle:
+                print("c. Adding Off-Cycle to query conditions")
+                query_conditions["$or"] = [{"inStock": True}, {"approved": True}]
+                
             # Query the collection with the combined filters
             return await all_snacks_collection.find(query_conditions).to_list(length=200)
 
@@ -139,7 +145,10 @@ async def build_starting_box(
             return total_score + low_calorie_boost
         else:
             return total_score
-# ============================================================================================ PREPARE: CREATE OBJECT KEY
+
+
+    
+# ============================================================================================ PREPARE: GROUP INTO CATEGORIES
 
     def group_snacks_by_primary_category(snacks):
         grouped_snacks = defaultdict(list)
@@ -481,7 +490,7 @@ async def build_starting_box(
         
     # ========================================================================================================================== BUILD
     
-    async def build_month_start_box():
+    async def build_month_start_box(off_cycle):
 
         context["month_start_box"].extend(context["repeat_monthly"] or [])
 
@@ -494,7 +503,7 @@ async def build_starting_box(
         transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"])
         
         # Fetch the safe snacks
-        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"])
+        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], off_cycle)
 
         # Get priority_setting from context
         priority_setting = context.get("priority_setting", 0)  # Default to 0 if not set
@@ -549,26 +558,34 @@ async def build_starting_box(
 
 # ========================================================================================================================== SAVE
             
-    async def save_month_start_box():
+    async def save_month_start_box(off_cycle):
         print(f'Saving Box: {context["month_start_box"]}')
-        date = datetime.now() if new_signup or is_reset_box else datetime.now() + timedelta(days=30)
-        month_as_int = int(date.strftime("%m%y"))
+
+        # Determine the correct month
+        current_date = datetime.now()
+        target_date = current_date.replace(day=1) + timedelta(days=32) if off_cycle else current_date
+        month_as_int = int(target_date.strftime("%m%y"))
 
         document = {
             "customerID": customerID,
             "snacks": context["month_start_box"],
+            "originalSnacks": context["month_start_box"],
             "month": month_as_int,
-            "size": context["subscription_type"]
+            "size": context["subscription_type"],
+            "popped": False,
+            "createdAt": datetime.utcnow(),
         }
+
         if context["month_start_box"]:
             await monthly_draft_box_collection.insert_one(document)
             print(f"Box saved successfully for customer: {customerID}")
         else:
             print("Box is empty. Nothing to save.")
 
+
 # ========================================================================================================================== RUN
     
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
-    await build_month_start_box()
-    await save_month_start_box()
+    await build_month_start_box(off_cycle)
+    await save_month_start_box(off_cycle)
     
