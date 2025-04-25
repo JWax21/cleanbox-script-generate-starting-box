@@ -380,6 +380,7 @@ async def build_starting_box(
             {
                 "SnackID": snack["SnackID"],
                 "primaryCategory": category,
+                "productLine": snack["productLine"],
                 "count": 1,
                 "premium": snack["premium"],
             }
