@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 from collections import defaultdict
 from motor.motor_asyncio import AsyncIOMotorClient
 from pprint import pprint
@@ -564,7 +565,7 @@ async def build_starting_box(
 
         # Determine the correct month
         current_date = datetime.now()
-        target_date = current_date.replace(day=1) + timedelta(days=32) if off_cycle else current_date
+        target_date = (current_date + relativedelta(months=2 if off_cycle else 1)).replace(day=1)
         month_as_int = int(target_date.strftime("%m%y"))
 
         document = {
