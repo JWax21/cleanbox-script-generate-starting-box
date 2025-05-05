@@ -10,7 +10,11 @@ app = FastAPI()
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Allow all origins (use specific domains in production for security)
+    allowed_origins = [
+        "https://88560556-a900-47e6-8007-e359b7ed3fd3-00-l5rqe8vdo9vu.picard.replit.dev/",     # Replit preview
+        "https://cleanboxsnacks.com",            # Production site
+        "http://localhost:5173",                 # Vite dev on local
+    ]
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
