@@ -7,14 +7,16 @@ from admin.routes.build_starting_box_routes import router as build_starting_box_
 # Initialize FastAPI app
 app = FastAPI()
 
+allowed_origins = [
+    "https://88560556-a900-47e6-8007-e359b7ed3fd3-00-l5rqe8vdo9vu.picard.replit.dev",
+    "https://cleanboxsnacks.com",
+    "http://localhost:5173",
+]
+
 # Add CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allowed_origins = [
-        "https://88560556-a900-47e6-8007-e359b7ed3fd3-00-l5rqe8vdo9vu.picard.replit.dev/",     # Replit preview
-        "https://cleanboxsnacks.com",            # Production site
-        "http://localhost:5173",                 # Vite dev on local
-    ]
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],  # Allow all HTTP methods
     allow_headers=["*"],  # Allow all headers
