@@ -562,7 +562,7 @@ async def build_starting_box(
     async def save_month_start_box(off_cycle):
         print(f'Saving Box: {context["month_start_box"]}')
 
-        # Determine the correct month
+        # MONTH
         current_date = datetime.now()
         months_to_add = 2 if off_cycle else 1
         year = current_date.year + (current_date.month + months_to_add - 1) // 12
@@ -570,6 +570,10 @@ async def build_starting_box(
         target_date = datetime(year, month, 1)
         month_as_int = int(target_date.strftime("%m%y"))
 
+        # ORDER STATUS
+        order_status = "Locked" if off_cycle else "Customize"
+        
+        
         document = {
             "customerID": customerID,
             "snacks": context["month_start_box"],
