@@ -576,10 +576,11 @@ async def build_starting_box(
         
         document = {
             "customerID": customerID,
-            "snacks": context["month_start_box"],
-            "originalSnacks": context["month_start_box"],
             "month": month_as_int,
             "size": context["subscription_type"],
+            "order_status": order_status,
+            "snacks": context["month_start_box"],
+            "originalSnacks": context["month_start_box"],
             "popped": False,
             "createdAt": datetime.utcnow(),
         }
@@ -596,4 +597,3 @@ async def build_starting_box(
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box(off_cycle)
     await save_month_start_box(off_cycle)
-    
