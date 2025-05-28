@@ -574,7 +574,13 @@ async def build_starting_box(
         order_status = "Locked" if off_cycle else "Customize"
         
         
+        created_at = datetime.utcnow()
+        timestamp = created_at.strftime("%Y%m%d%H%M%S")
+
+        boxID = f"box_{month_as_int}_{context['subscription_type']}_{customerID}_{timestamp}"
+
         document = {
+            "boxID": boxID,
             "customerID": customerID,
             "month": month_as_int,
             "size": context["subscription_type"],
@@ -582,7 +588,7 @@ async def build_starting_box(
             "snacks": context["month_start_box"],
             "originalSnacks": context["month_start_box"],
             "popped": False,
-            "createdAt": datetime.utcnow(),
+            "createdAt": created_at,
         }
 
         if context["month_start_box"]:
