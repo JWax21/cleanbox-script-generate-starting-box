@@ -7,6 +7,7 @@ from collections import Counter
 async def build_starting_box(
     customerID: str,
     new_signup: bool,
+    repeat_customer: bool,
     off_cycle: bool,
     is_reset_box: bool,
     reset_total: int,
@@ -26,7 +27,7 @@ async def build_starting_box(
         "month_start_box": []
     }
 
-# ========================================================================================================================== PRE: GET CUSTOMER INFO 
+# ============================================================================================================== PREPARE: GET CUSTOMER INFO 
     
     async def get_customer_by_customerID(customerID, is_reset_box, reset_total):
         try:
@@ -127,24 +128,64 @@ async def build_starting_box(
             print(f"An error occurred while retrieving snacks: {e}")
             return []
 
-# ============================================================================================ PREPARE: SORT BY SCORE
-    
-    def get_score(snack, priority_setting):
+# ============================================================================================================================ 2. SCORE EACH SNACK
+
+    async def get_previous_snack_ids(customerID):
+        
+        """
+        Query monthly_draft_box_collection for all SnackIDs associated with a customerID.
+
+        Args:
+            customer_id (str): The customer ID to query for
+
+        Returns:
+            List[str]: List of unique SnackIDs from all matching documents
+        """
+        try:
+            snack_ids = []
+            async for doc in monthly_draft_box_collection.find({"customerID": customerID}):
+                snacks = doc.get("snacks", [])
+                for snack in snacks:
+                    snack_id = snack.get("SnackID")
+                    if snack_id and snack_id not in snack_ids:
+                        snack_ids.append(snack_id)
+            print(f"Previous SnackIDs for customer {customerID}:")
+            for snack_id in snack_ids:
+                print(f" - {snack_id}")
+            print("\n")
+            return snack_ids
+        except Exception as e:
+            print(f"Error querying previous snacks: {e}")
+            return []
+
+    def get_score(snack, priority_setting, previous_snack_ids):
+        
         total_score = snack.get("totalScore", 0)
         protein_boost = snack.get("highProteinBoost", 0)
         low_carb_boost = snack.get("lowCarbBoost", 0)
         low_calorie_boost = snack.get("lowCalorieBoost", 0)
 
+        # 01. BOOST (PREFERENCE)
         if priority_setting == 0:
-            return total_score
+            score = total_score
         elif priority_setting == 1:
-            return total_score + protein_boost
+            score = total_score + protein_boost
         elif priority_setting == 2:
-            return total_score + low_carb_boost
+            score = total_score + low_carb_boost
         elif priority_setting == 3:
-            return total_score + low_calorie_boost
+            score = total_score + low_calorie_boost
         else:
-            return total_score
+            score = total_score
+
+        # 02. PENALTY (PREVIOUSLY RECEIVED)
+        
+        snack_id = snack.get("SnackID")
+        if snack_id in previous_snack_ids:
+            print(f"Applying penalty to previously received snack: {snack_id}")
+            score -= 50
+
+        print(f"SnackID: {snack_id}, Priority: {priority_setting}, Score: {score}")
+        return score
 
 
     
@@ -248,7 +289,7 @@ async def build_starting_box(
 
 # ============================================================================================ 3. ADD SNACKS
 
-    def add_snacks_loop(category, desired_count, grouped_snacks, context):
+    def add_snacks_loop(category, desired_count, grouped_snacks, context, previous_snack_ids):
         """
         Loops through the snacks in a single category and adds snacks to the context's month_start_box
         until either the desired count is reached or the secondary category increment exceeds 5.
@@ -262,8 +303,6 @@ async def build_starting_box(
         Returns:
         - None (modifies the context in place).
         """
-
-        print("RUNNING")
         
         # Initialize counters and sets for tracking usage
         brand_usage_count = Counter()
@@ -272,8 +311,6 @@ async def build_starting_box(
         next_snacks = []
         secondary_category_increment = 0
         most_recent_saved_secondary_category = 0
-
-        print("RUNNING")
         
         # Extract unique values for secondary categories, forms, brands, and flavor tags
         secondary_category_values = list(set(snack["secondaryCategory"] for snack in grouped_snacks))
@@ -286,7 +323,7 @@ async def build_starting_box(
         print("Unique Forms:", form_values)
         print("Unique Brands:", brand_values)
         print("Unique Flavor Tags:", flavor_tag_values)
-
+        print(f"\n")
 
         # Initialize usage count
         brand_usage_count.update({brand: 0 for brand in brand_values})
@@ -302,7 +339,7 @@ async def build_starting_box(
 
         # Build the box
         while len(next_snacks) < desired_count:
-            if secondary_category_increment > 5:
+            if secondary_category_increment > 15:
                 print(f"Warning: Secondary category increment exceeded limit for category '{category}'. Breaking loop.")
                 break
 
@@ -313,12 +350,22 @@ async def build_starting_box(
             least_used_flavor_tags = get_least_used(flavor_tag_usage_count)
             least_used_forms = get_least_used(form_usage_count)
 
+            # Print the least used values
+            print(f"\n")
+            print(f"Searching for:")
+            print(f"Current Category: {current_category}")
+            print(f"Least Used Brands: {least_used_brands}")
+            print(f"Least Used Forms: {least_used_forms}")
+            print(f"Least Used Flavor Tags: {least_used_flavor_tags}")
+            print(f"\n")
+
             # Filter snacks based on criteria
             matching_snacks = [
                 snack for snack in grouped_snacks
                 if snack["secondaryCategory"] == current_category and
                    snack["form"] in least_used_forms and
                    snack["brand"] in least_used_brands and
+                  (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and 
                    all(tag in least_used_flavor_tags for tag in snack.get("flavorTags", []))
             ]
 
@@ -328,20 +375,24 @@ async def build_starting_box(
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
                        snack["form"] in least_used_forms and
-                       snack["brand"] in least_used_brands
+                       snack["brand"] in least_used_brands and 
+                       (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
+
                 ]
 
             if not matching_snacks:
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                       snack["form"] in least_used_forms
+                       snack["form"] in least_used_forms and 
+                      (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
                 ]
 
             if not matching_snacks:
                 matching_snacks = [
                     snack for snack in grouped_snacks
-                    if snack["secondaryCategory"] == current_category
+                    if snack["secondaryCategory"] == current_category and
+                    (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
                 ]
 
             # If still no matches, increment secondary category and continue
@@ -352,16 +403,32 @@ async def build_starting_box(
 
 
             # ADDED
+            print("ALL MATCHING SNACKS:")
+            for snack in matching_snacks:
+                print(
+                    f"SnackID: {snack.get('SnackID')}, "
+                    f"productLine: {snack.get('productLine')}, "
+                    f"ounces: {snack.get('ounces')}, "
+                    f"primaryCategory: {snack.get('primaryCategory')}, "
+                    f"secondaryCategory: {snack.get('secondaryCategory')}, "
+                    f"form: {snack.get('form')}, "
+                    f"brand: {snack.get('brand')}, "
+                    f"flavor: {snack.get('flavor')}"
+                )
+                
             selected_snack = matching_snacks[0]
             next_snacks.append(selected_snack)
 
             # Log the SnackID of the added snack
+            print(f"\n")
             print(f"Added to next_snacks: {selected_snack['SnackID']}")
 
             # Print all SnackIDs in next_snacks, each on a new line
+            print(f"\n")
             print("NEXT SNACKS:")
             for snack in next_snacks:
                 print(snack["SnackID"])
+            print(f"\n")
 
 
             brand_usage_count[selected_snack["brand"]] += 1
@@ -393,7 +460,7 @@ async def build_starting_box(
 
     ### STAPLES
     
-    def process_staples(transformed_staples, grouped_snacks, context):
+    def process_staples(transformed_staples, grouped_snacks, context, previous_snack_ids):
         """
         Processes each category in transformed_staples by calling add_snacks_loop
         to add snacks to the context's month_start_box.
@@ -424,14 +491,15 @@ async def build_starting_box(
                 category=category,
                 desired_count=count,
                 grouped_snacks=snacks_for_category,
-                context=context
+                context=context,
+                previous_snack_ids=previous_snack_ids
             )
 
         print("\n")    
 
     ### REMAINING CATEGORIES
 
-    def process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context):
+    def process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids):
         """
         Processes each category in remaining_categories by calling add_snacks_loop
         to dynamically distribute snacks across categories and add them to the context's month_start_box.
@@ -472,16 +540,16 @@ async def build_starting_box(
                 # Add 1 to the base count for the first 'remainder' categories
                 dynamic_count = base_count + (1 if idx < remainder else 0)
 
-                print(f"Processing category: {category}")
-                print(f"Number of snacks available for category '{category}': {len(snacks_for_category)}")
-                print(f"Dynamic count for category '{category}': {dynamic_count}")
+                print(f"** PROCESSING CATEGORY: {category}, Available: {len(snacks_for_category)}, Selecting: {dynamic_count}")
+                print("\n")
 
                 # Call add_snacks_loop with the calculated dynamic count
                 add_snacks_loop(
                     category=category,
                     desired_count=dynamic_count,
                     grouped_snacks=snacks_for_category,
-                    context=context
+                    context=context,
+                    previous_snack_ids=previous_snack_ids
                 )
             else:
                 print(f"Skipping category '{category}' as no snacks are available.")
@@ -499,6 +567,7 @@ async def build_starting_box(
         print("===============")
         print("START: BUILDING DRAFT BOX\n")
         print(f'EXTEND 1: {context["month_start_box"]}')
+        print("--------------------------------------------------------------------------")
         print("\n")
         
         transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"])
@@ -514,10 +583,13 @@ async def build_starting_box(
         if not isinstance(safe_snacks, list):
             raise ValueError("safe_snacks must be a list.")
 
-        # Sort the safe_snacks using the external get_score function
+        # GET PREVIOUS SNACK IDS (PENALTY)
+        previous_snack_ids = await get_previous_snack_ids(customerID)
+        
+        # CALCULATE SCORE
         sorted_safe_snacks = sorted(
             safe_snacks, 
-            key=lambda snack: get_score(snack, priority_setting), 
+            key=lambda snack: get_score(snack, priority_setting, previous_snack_ids), 
             reverse=True
         )
         
@@ -526,13 +598,15 @@ async def build_starting_box(
 # ======= 2. ADD STAPLES
         
         # Call the function
-        process_staples(transformed_staples, grouped_snacks, context)
+        process_staples(transformed_staples, grouped_snacks, context, previous_snack_ids)
 
         # Print the remaining categories in the month_start_box
         print("EXTEND 2 (REMAINING CATEGORIES):")
+        print("--------------------------------------------------------------------------")
+        print("\n")
         for item in context["month_start_box"]:
             print(item)
-
+        print("\n")
 
 # ======= 3. COMPLETE BOX WITH REMAINING CATEGORIES
 
@@ -543,7 +617,7 @@ async def build_starting_box(
         
         count_to_fill = context["subscription_type"] - len(context["month_start_box"])
         
-        process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context)
+        process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids)
 
         # CHECK: BOX IS FULLL
         if len(context["month_start_box"]) != context["subscription_type"]:
@@ -553,16 +627,18 @@ async def build_starting_box(
 
         # Print the extended list
         print("EXTEND 3 (REMAINING CATEGORIES):")
+        print("--------------------------------------------------------------------------")
+        print("\n")
         for index, item in enumerate(context["month_start_box"], start=1):
             print(f"{index}: {item}")
-
+        print("\n")
 
 # ========================================================================================================================== SAVE
             
     async def save_month_start_box(off_cycle):
         print(f'Saving Box: {context["month_start_box"]}')
 
-        # Determine the correct month
+        # MONTH
         current_date = datetime.now()
         months_to_add = 2 if off_cycle else 1
         year = current_date.year + (current_date.month + months_to_add - 1) // 12
@@ -570,14 +646,25 @@ async def build_starting_box(
         target_date = datetime(year, month, 1)
         month_as_int = int(target_date.strftime("%m%y"))
 
+        # ORDER STATUS
+        order_status = "Locked" if off_cycle else "Customize"
+        
+        
+        created_at = datetime.utcnow()
+        timestamp = created_at.strftime("%Y%m%d%H%M%S")
+
+        boxID = f"box_{month_as_int}_{context['subscription_type']}_{customerID}_{timestamp}"
+
         document = {
+            "boxID": boxID,
             "customerID": customerID,
-            "snacks": context["month_start_box"],
-            "originalSnacks": context["month_start_box"],
             "month": month_as_int,
             "size": context["subscription_type"],
+            "order_status": order_status,
+            "snacks": context["month_start_box"],
+            "originalSnacks": context["month_start_box"],
             "popped": False,
-            "createdAt": datetime.utcnow(),
+            "createdAt": created_at,
         }
 
         if context["month_start_box"]:
@@ -592,4 +679,3 @@ async def build_starting_box(
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box(off_cycle)
     await save_month_start_box(off_cycle)
-    
