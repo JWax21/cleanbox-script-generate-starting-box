@@ -12,9 +12,11 @@ router = APIRouter()
 class BuildStartingBoxRequest(BaseModel):
     customerID: str
     new_signup: bool
+    repeat_customer: bool
     off_cycle: bool
     is_reset_box: bool = False
     reset_total: int = 0
+    
 
 @router.post("/build-starting-box")
 async def build_starting_box_endpoint(
@@ -24,7 +26,8 @@ async def build_starting_box_endpoint(
     try:
         result = await build_starting_box(
             customerID=request.customerID, 
-            new_signup=request.new_signup,     
+            new_signup=request.new_signup,
+            repeat_customer=request.repeat_customer,
             off_cycle=request.off_cycle,
             is_reset_box=request.is_reset_box,  # Include optional field
             reset_total=request.reset_total,  # Include optional field
