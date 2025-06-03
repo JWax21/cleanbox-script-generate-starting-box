@@ -9,7 +9,7 @@ app = FastAPI()
 
 allowed_origins = [
     "https://88560556-a900-47e6-8007-e359b7ed3fd3-00-l5rqe8vdo9vu.picard.replit.dev",
-    "https://cleanboxsnacks.com",
+    "https://www.cleanboxsnacks.com",
     "https://staging.cleanboxsnacks.com",
     "http://localhost:5173",
 ]
