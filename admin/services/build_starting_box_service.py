@@ -679,22 +679,33 @@ async def build_starting_box(
             print(item)
         print("\n")
 
+        print("MOVING")
+
 # ======= 3. COMPLETE BOX WITH REMAINING CATEGORIES
 
         # ADD REMAINING CATEGORIES
         remaining_categories = [
             cat for cat in grouped_snacks if cat not in transformed_staples and cat not in (context["category_dislikes"] or [])
         ]
+
+        print(f"Remaining categories to fill: {remaining_categories}")
         
         count_to_fill = context["subscription_type"] - len(context["month_start_box"])
-        
-        process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids)
 
-        # CHECK: BOX IS FULLL
-        if len(context["month_start_box"]) != context["subscription_type"]:
-            # Recalculate count_to_fill and call the function again
-            count_to_fill = context["subscription_type"] - len(context["month_start_box"])
+        print(f"Count to fill: {count_to_fill}")
+
+        # Only process remaining categories if count_to_fill is greater than 0
+        if count_to_fill > 0:
             process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids)
+
+        # CHECK: BOX IS FULL
+        if len(context["month_start_box"]) != context["subscription_type"]:
+            print(f"EXTEND 3 (REMAINING CATEGORIES): Box still not full: {len(context['month_start_box'])}/{context['subscription_type']}. Adding remaining snacks.")
+            # Recalculate count_to_fill
+            count_to_fill = context["subscription_type"] - len(context["month_start_box"])
+            # Only process remaining categories if count_to_fill is greater than 0
+            if count_to_fill > 0:
+                process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids)
 
         # Print the extended list
         print("EXTEND 3 (REMAINING CATEGORIES):")
