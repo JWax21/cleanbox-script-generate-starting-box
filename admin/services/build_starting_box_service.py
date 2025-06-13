@@ -678,7 +678,6 @@ async def build_starting_box(
         for item in context["month_start_box"]:
             print(item)
         print("\n")
-
         print("MOVING")
 
 # ======= 3. COMPLETE BOX WITH REMAINING CATEGORIES
