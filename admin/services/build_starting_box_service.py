@@ -69,7 +69,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== 1. FILTER SNACKS
     
-    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, off_cycle=False, most_recent_snack_ids=None):
+    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, dislikedCategories=None, off_cycle=False, most_recent_snack_ids=None):
         try:
             print("FILTERING SNACKS")
             # Initialize query conditions
@@ -116,6 +116,11 @@ async def build_starting_box(
                 # Add vetoed flavors condition to the query
                 query_conditions["flavorTags"] = {"$nin": formatted_flavors}
 
+            # Filter by disliked categories if provided
+            if dislikedCategories:
+                print("c. Adding Disliked Categories to query conditions")
+                query_conditions["primaryCategory"] = {"$nin": dislikedCategories}
+                
             # Filter by off-cycle if provided
             if off_cycle:
                 print("c. Adding Off-Cycle to query conditions")
@@ -127,7 +132,7 @@ async def build_starting_box(
                 query_conditions["SnackID"] = {"$nin": most_recent_snack_ids}
 
             # Query the collection with the combined filters
-            snacks = await all_snacks_collection.find(query_conditions).to_list(length=200)
+            snacks = await all_snacks_collection.find(query_conditions).to_list(length=500)
 
             # Print the count of snacks returned
             print(f"e. Number of snacks returned: {len(snacks)}")
@@ -367,11 +372,12 @@ async def build_starting_box(
         - desired_count: Integer specifying the number of snacks to add for the category.
         - grouped_snacks: Dict where keys are categories, and values are lists of snacks for the specific category.
         - context: Dict to hold the output, specifically the 'month_start_box'.
+        - previous_snack_ids: Set of SnackIDs to avoid reusing.
 
         Returns:
         - None (modifies the context in place).
         """
-        
+
         # Initialize counters and sets for tracking usage
         brand_usage_count = Counter()
         flavor_tag_usage_count = Counter()
@@ -379,7 +385,7 @@ async def build_starting_box(
         next_snacks = []
         secondary_category_increment = 0
         most_recent_saved_secondary_category = 0
-        
+
         # Extract unique values for secondary categories, forms, brands, and flavor tags
         secondary_category_values = list(set(snack["secondaryCategory"] for snack in grouped_snacks))
         form_values = list(set(snack["form"] for snack in grouped_snacks))
@@ -412,7 +418,7 @@ async def build_starting_box(
                 break
 
             # Determine the current category and form
-            current_category = secondary_category_values[(secondary_category_increment+most_recent_saved_secondary_category) % len(secondary_category_values)]
+            current_category = secondary_category_values[(secondary_category_increment + most_recent_saved_secondary_category) % len(secondary_category_values)]
 
             least_used_brands = get_least_used(brand_usage_count)
             least_used_flavor_tags = get_least_used(flavor_tag_usage_count)
@@ -427,14 +433,32 @@ async def build_starting_box(
             print(f"Least Used Flavor Tags: {least_used_flavor_tags}")
             print(f"\n")
 
-            # Filter snacks based on criteria
+            # Define priority condition based on context["priority_setting"]
+            priority_setting = context.get("priority_setting", 0)  # Default to 0 if not specified
+            priority_condition = lambda snack: (
+                priority_setting == 0 or
+                (priority_setting == 1 and (
+                    snack.get("protein", 0) > 7 or
+                    snack.get("carbs", float('inf')) < 10 or
+                    snack.get("primaryCategory") in ["Dried Fruit", "Fruit Gummies"]
+                )) or
+                (priority_setting == 2 and (
+                    snack.get("carbs", float('inf')) < 10 or
+                    snack.get("primaryCategory") in ["Dried Fruit", "Fruit Gummies"]
+                )) or
+                (priority_setting == 3 and snack.get("calories", float('inf')) < 150)
+            )
+
+            # Filter snacks based on criteria, including priority setting
             matching_snacks = [
                 snack for snack in grouped_snacks
                 if snack["secondaryCategory"] == current_category and
+                   (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
                    snack["form"] in least_used_forms and
                    snack["brand"] in least_used_brands and
-                  (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and 
-                   all(tag in least_used_flavor_tags for tag in snack.get("flavorTags", []))
+                   (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
+                   all(tag in least_used_flavor_tags for tag in snack.get("flavorTags", [])) and
+                   priority_condition(snack)  # Added priority condition
             ]
 
             # Relax criteria step-by-step if no matches
@@ -442,25 +466,30 @@ async def build_starting_box(
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
+                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
                        snack["form"] in least_used_forms and
-                       snack["brand"] in least_used_brands and 
-                       (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
-
+                       snack["brand"] in least_used_brands and
+                       (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
+                       priority_condition(snack)  # Added priority condition
                 ]
 
             if not matching_snacks:
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                       snack["form"] in least_used_forms and 
-                      (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
+                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                       snack["form"] in least_used_forms and
+                       (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
+                       priority_condition(snack)  # Added priority condition
                 ]
 
             if not matching_snacks:
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                    (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids)
+                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                       (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
+                       priority_condition(snack)  # Added priority condition
                 ]
 
             # If still no matches, increment secondary category and continue
@@ -469,21 +498,24 @@ async def build_starting_box(
                 secondary_category_increment += 1
                 continue
 
-
-            # ADDED
+            # Print all matching snacks
             print("ALL MATCHING SNACKS:")
             for snack in matching_snacks:
                 print(
                     f"SnackID: {snack.get('SnackID')}, "
+                    f"Item Of Month Boost: {snack.get('itemOfMonthBoost')}, "
                     f"productLine: {snack.get('productLine')}, "
                     f"ounces: {snack.get('ounces')}, "
                     f"primaryCategory: {snack.get('primaryCategory')}, "
                     f"secondaryCategory: {snack.get('secondaryCategory')}, "
                     f"form: {snack.get('form')}, "
                     f"brand: {snack.get('brand')}, "
-                    f"flavor: {snack.get('flavor')}"
+                    f"flavor: {snack.get('flavor')}, "
+                    f"protein: {snack.get('protein', 'N/A')}, "  # Added for debugging
+                    f"carbs: {snack.get('carbs', 'N/A')}, "    # Added for debugging
+                    f"calories: {snack.get('calories', 'N/A')}" # Added for debugging
                 )
-                
+
             selected_snack = matching_snacks[0]
             next_snacks.append(selected_snack)
 
@@ -498,16 +530,17 @@ async def build_starting_box(
                 print(snack["SnackID"])
             print(f"\n")
 
-
+            # Update usage counts
             brand_usage_count[selected_snack["brand"]] += 1
             for tag in selected_snack.get("flavorTags", []):
                 flavor_tag_usage_count[tag] += 1
+            form_usage_count[selected_snack["form"]] += 1
 
             # Remove selected snack from the category list
             grouped_snacks.remove(selected_snack)
 
             # Reset increment and rotate form
-            most_recent_saved_secondary_category +=1
+            most_recent_saved_secondary_category += 1
             secondary_category_increment = 0
 
         # Add results to the context
@@ -577,6 +610,7 @@ async def build_starting_box(
         - count_to_fill (int): Total number of snacks to be added across all categories.
         - grouped_snacks (dict): A dictionary where keys are category names and values are lists of snacks.
         - context (dict): A dictionary to hold the output, specifically the 'month_start_box'.
+        - previous_snack_ids (list): List of previously selected snack IDs to avoid duplicates.
 
         Returns:
         - None: Modifies the context in place.
@@ -589,17 +623,22 @@ async def build_starting_box(
         if not isinstance(count_to_fill, int) or count_to_fill <= 0:
             raise ValueError("count_to_fill must be a positive integer.")
 
+        # Filter out categories in context["category_dislikes"]
+        disliked_categories = context.get("category_dislikes", [])
+        print(f"Disliked categories: {disliked_categories}")
+        valid_categories = [category for category in remaining_categories if category not in disliked_categories]
+
         # Calculate the dynamic count for each category
-        num_categories = len(remaining_categories)
+        num_categories = len(valid_categories)
         if num_categories == 0:
-            print("No categories to process.")
+            print("No valid categories to process after filtering dislikes.")
             return
 
         # Distribute counts evenly and handle any remainder
         base_count = count_to_fill // num_categories
         remainder = count_to_fill % num_categories
 
-        for idx, category in enumerate(remaining_categories):
+        for idx, category in enumerate(valid_categories):
             # Get the snacks for the current category
             snacks_for_category = grouped_snacks.get(category, [])
 
@@ -623,7 +662,6 @@ async def build_starting_box(
                 print(f"Skipping category '{category}' as no snacks are available.")
 
         print("\n")
-
         
     # ========================================================================================================================== BUILD
     
@@ -644,7 +682,7 @@ async def build_starting_box(
         # Fetch the safe snacks
         most_recent_snack_ids = await get_most_recent_box(customerID)
         
-        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], off_cycle, most_recent_snack_ids)
+        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], context["category_dislikes"], off_cycle, most_recent_snack_ids)
 
         # Get priority_setting from context
         priority_setting = context.get("priority_setting", 0)  # Default to 0 if not set
