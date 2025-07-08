@@ -829,6 +829,7 @@ async def build_starting_box(
         if context["month_start_box"]:
             await monthly_draft_box_collection.insert_one(document)
             print(f"Box saved successfully for customer: {customerID}")
+            return document["snacks"]  # Return only the snacks field
         else:
             print("Box is empty. Nothing to save.")
 
@@ -837,4 +838,5 @@ async def build_starting_box(
     
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box(off_cycle)
-    await save_month_start_box(off_cycle)
+    snacks = await save_month_start_box(off_cycle)  # Capture the snacks field
+    return snacks  # Return the snacks to the endpoint
