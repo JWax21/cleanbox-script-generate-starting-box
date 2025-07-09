@@ -1,5 +1,6 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+from admin.models.customers_model import BuildStartingBoxRequest  # Import from models.py
 from admin.services.build_starting_box_service import build_starting_box  # Import the service
 from admin.config.database import (
     monthly_draft_box_collection,
@@ -8,15 +9,6 @@ from admin.config.database import (
 )
 
 router = APIRouter()
-
-class BuildStartingBoxRequest(BaseModel):
-    customerID: str
-    new_signup: bool
-    repeat_customer: bool
-    off_cycle: bool
-    is_reset_box: bool = False
-    reset_total: int = 0
-    
 
 @router.post("/build-starting-box")
 async def build_starting_box_endpoint(
@@ -31,6 +23,7 @@ async def build_starting_box_endpoint(
             off_cycle=request.off_cycle,
             is_reset_box=request.is_reset_box,  # Include optional field
             reset_total=request.reset_total,  # Include optional field
+            repeat_monthly=request.repeat_monthly,
             monthly_draft_box_collection=monthly_draft_box_collection,
             all_customers_collection=all_customers_collection,
             all_snacks_collection=all_snacks_collection

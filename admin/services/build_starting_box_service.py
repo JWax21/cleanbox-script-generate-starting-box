@@ -1,8 +1,10 @@
 from datetime import datetime, timedelta
+from typing import List, Optional  # Import Optional
 from collections import defaultdict
 from motor.motor_asyncio import AsyncIOMotorClient
 from pprint import pprint
 from collections import Counter
+from admin.models.customers_model import SnackItem 
 
 async def build_starting_box(
     customerID: str,
@@ -11,10 +13,17 @@ async def build_starting_box(
     off_cycle: bool,
     is_reset_box: bool,
     reset_total: int,
+    repeat_monthly: Optional[List[SnackItem]],  # Make repeat_monthly optional
     monthly_draft_box_collection,
     all_customers_collection,
     all_snacks_collection,
 ):
+    
+    # Convert repeat_monthly to list of dicts if provided
+    serialized_repeat_monthly = (
+        [snack.dict() for snack in repeat_monthly] if repeat_monthly is not None else None
+    )
+    
     # Context variables to store shared data
     context = {
         "staples": None,
@@ -24,6 +33,7 @@ async def build_starting_box(
         "category_dislikes": None,
         "repeat_monthly": None,
         "subscription_type": None,
+        "repeat_monthly": serialized_repeat_monthly,  # Use serialized version
         "month_start_box": []
     }
 
@@ -40,7 +50,6 @@ async def build_starting_box(
                     "staples": 1, 
                     "vetoedFlavors": 1,
                     "prioritySetting": 1,
-                    "repeatMonthly": 1, 
                     "subscription_type": 1
                 }
             )
@@ -50,7 +59,6 @@ async def build_starting_box(
                 context["vetoed_flavors"] = customer_document.get("vetoedFlavors")
                 context["staples"] = customer_document.get("staples")
                 context["category_dislikes"] = customer_document.get("dislikes")
-                context["repeat_monthly"] = customer_document.get("repeatMonthly")
                 context["priority_setting"] = customer_document.get("prioritySetting")
 
                 # BASE BOX OR RESET BOX
