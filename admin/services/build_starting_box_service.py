@@ -304,60 +304,74 @@ async def build_starting_box(
             print(f"Many count: {many_count}, Few count: {few_count}, One count: {one_count}")
 
             # Initialize value mapping
-            value_mapping = {"many": 1, "a few": 1, "one": 1}  # Default values
-
-            # Transformation logic based on your priority order
-            # If the condition is true, the assignment is too large, so skip to the next
+            # Calculate total for each condition
             if many_count * 2 + few_count * 1 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 2, "a few": 1, "one": 1}
-                # Maximize "many" to 2
-                remaining = adjusted_subscription_type - (many_count * 2 + few_count * 1 + one_count * 1)
+                total = many_count * 2 + few_count * 1 + one_count * 1
+                print(f"Condition 1: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 1: {remaining}")
                 if remaining > 0 and few_count > 0:
-                    # Distribute remaining to "a few" if possible
                     value_mapping["a few"] = min(2, 1 + remaining // few_count)
+                    print(f"Adjusted 'a few': {value_mapping['a few']}, new value_mapping={value_mapping}")
             elif many_count * 2 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 2, "a few": 2, "one": 1}
-                # Maximize "a few" to 2
-                remaining = adjusted_subscription_type - (many_count * 2 + few_count * 2 + one_count * 1)
+                total = many_count * 2 + few_count * 2 + one_count * 1
+                print(f"Condition 2: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 2: {remaining}")
                 if remaining > 0 and many_count > 0:
-                    # Distribute remaining to "many" if possible
                     value_mapping["many"] = min(3, 2 + remaining // many_count)
+                    print(f"Adjusted 'many': {value_mapping['many']}, new value_mapping={value_mapping}")
             elif many_count * 3 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 3, "a few": 2, "one": 1}
-                # Maximize "many" to 3
-                remaining = adjusted_subscription_type - (many_count * 3 + few_count * 2 + one_count * 1)
+                total = many_count * 3 + few_count * 2 + one_count * 1
+                print(f"Condition 3: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 3: {remaining}")
                 if remaining > 0 and many_count > 0:
                     value_mapping["many"] = min(4, 3 + remaining // many_count)
+                    print(f"Adjusted 'many': {value_mapping['many']}, new value_mapping={value_mapping}")
             elif many_count * 4 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 4, "a few": 2, "one": 1}
-                # Maximize "many" to 4
-                remaining = adjusted_subscription_type - (many_count * 4 + few_count * 2 + one_count * 1)
+                total = many_count * 4 + few_count * 2 + one_count * 1
+                print(f"Condition 4: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 4: {remaining}")
                 if remaining > 0 and many_count > 0:
                     value_mapping["many"] = min(5, 4 + remaining // many_count)
+                    print(f"Adjusted 'many': {value_mapping['many']}, new value_mapping={value_mapping}")
             elif many_count * 5 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 5, "a few": 2, "one": 1}
-                # Maximize "many" to 5
-                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 2 + one_count * 1)
+                total = many_count * 5 + few_count * 2 + one_count * 1
+                print(f"Condition 5: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 5: {remaining}")
                 if remaining > 0 and few_count > 0:
                     value_mapping["a few"] = min(3, 2 + remaining // few_count)
+                    print(f"Adjusted 'a few': {value_mapping['a few']}, new value_mapping={value_mapping}")
             elif many_count * 5 + few_count * 3 + one_count * 1 < adjusted_subscription_type:
                 value_mapping = {"many": 5, "a few": 3, "one": 1}
-                # Maximize "a few" to 3
-                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 3 + one_count * 1)
+                total = many_count * 5 + few_count * 3 + one_count * 1
+                print(f"Condition 6: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining after Condition 6: {remaining}")
                 if remaining > 0 and many_count > 0:
                     value_mapping["many"] = min(6, 5 + remaining // many_count)
+                    print(f"Adjusted 'many': {value_mapping['many']}, new value_mapping={value_mapping}")
             else:
-                value_mapping = {"many": 5, "a few": 3, "one": 1}
-                # Maximize "many" to 5
-                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 3 + one_count * 1)
+                value_mapping = {"many": 1, "a few": 1, "one": 1}
+                total = many_count * 1 + few_count * 1 + one_count * 1
+                print(f"Else Condition: Total={total}, value_mapping={value_mapping}")
+                remaining = adjusted_subscription_type - total
+                print(f"Remaining in Else: {remaining}")
                 if remaining < 0:
-                    # If total exceeds, reduce "many" or "a few" to fit
                     if many_count > 0:
                         value_mapping["many"] = max(4, (adjusted_subscription_type - few_count * 3 - one_count * 1) // many_count)
+                        print(f"Adjusted 'many' in Else: {value_mapping['many']}, new value_mapping={value_mapping}")
                     elif few_count > 0:
                         value_mapping["a few"] = max(2, (adjusted_subscription_type - many_count * 5 - one_count * 1) // few_count)
-
-            print(f"Value mapping: {value_mapping}")
+                        print(f"Adjusted 'a few' in Else: {value_mapping['a few']}, new value_mapping={value_mapping}")
 
             # Apply the mapping to the staples
             transformed_staples = {k: value_mapping[v] for k, v in staples.items()}
