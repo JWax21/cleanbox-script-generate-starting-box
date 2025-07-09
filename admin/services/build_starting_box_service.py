@@ -69,12 +69,19 @@ async def build_starting_box(
 
 # ========================================================================================================================== 1. FILTER SNACKS
     
-    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, dislikedCategories=None, off_cycle=False, most_recent_snack_ids=None):
+    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, dislikedCategories=None, off_cycle=False, most_recent_snack_ids=None, repeat_monthly=None):
         try:
             print("FILTERING SNACKS")
             # Initialize query conditions
             query_conditions = {"replacementOnly": {"$ne": True}}  # Exclude snacks where replacementOnly is true
 
+            # Filter by repeat_monthly SnackIDs if provided
+            if repeat_monthly:
+                print("d. Adding Repeat Monthly SnackIDs to query conditions")
+                # Extract SnackIDs from repeat_monthly array
+                repeat_snack_ids = [item["SnackID"] for item in repeat_monthly]
+                query_conditions["SnackID"] = {"$nin": repeat_snack_ids}
+                
             # Filter by allergens if provided
             if allergens:
                 print("a. Adding Allergens to query conditions")
@@ -261,82 +268,106 @@ async def build_starting_box(
 
 # ============================================================================================ PREPARE: ACTUAL COUNT FOR STAPLES
     
-    def transform_staples_object(staples, subscription_type, category_dislikes):
+    def transform_staples_object(staples, subscription_type, category_dislikes, adjusted_subscription_type):
         try:
             print("Starting transform_staples_object function...")
             print(f"Input staples: {staples}")
             print(f"Subscription type: {subscription_type}")
             print(f"Category dislikes: {category_dislikes}")
+            print(f"Adjusted subscription type: {adjusted_subscription_type}")
+            print("\n")
+
+            # Validate inputs
+            if not isinstance(staples, dict):
+                raise ValueError("Staples must be a dictionary.")
+            if not all(v in ["one", "a few", "many"] for v in staples.values()):
+                raise ValueError("Staples values must be 'one', 'a few', or 'many'.")
+            if not isinstance(subscription_type, int) or not isinstance(adjusted_subscription_type, int):
+                raise ValueError("Subscription types must be integers.")
+            if subscription_type < 0 or adjusted_subscription_type < 0:
+                raise ValueError("Subscription types cannot be negative.")
 
             # COUNTS
             staples_count = len(staples)
-            # Handle case where category_dislikes is None
             dislikes_count = len(category_dislikes) if category_dislikes is not None else 0
-            grey_categories = 10 - staples_count - dislikes_count
-            print(f"Staples count: {staples_count}, Dislikes count: {dislikes_count}, Grey categories: {grey_categories}")
+            optional_categories = 10 - staples_count - dislikes_count
+            print(f"Staples count: {staples_count}, Dislikes count: {dislikes_count}, Optional categories: {optional_categories}")
+            print("\n")
 
-            if grey_categories < 0:
-                raise ValueError("Invalid inputs: staples and category dislikes exceed available categories.")
+            if optional_categories < 0:
+                raise ValueError("Invalid inputs: staples and category dislikes exceed available categories (10).")
 
-            print(f"Grey categories calculated: {grey_categories}")
+            # Count occurrences of each value in staples
+            many_count = sum(1 for v in staples.values() if v == "many")
+            few_count = sum(1 for v in staples.values() if v == "a few")
+            one_count = sum(1 for v in staples.values() if v == "one")
+            print(f"Many count: {many_count}, Few count: {few_count}, One count: {one_count}")
 
-            # Score placeholders for base mappings
-            score_placeholders = {
-                20: {"many": 5, "a few": 3, "one": 1},
-                16: {"many": 4, "a few": 2, "one": 1},
-                12: {"many": 3, "a few": 2, "one": 1},
-            }
-            print(f"Score placeholders defined: {score_placeholders}")
+            # Initialize value mapping
+            value_mapping = {"many": 1, "a few": 1, "one": 1}  # Default values
 
-            # Get the base mapping for the given subscription type
-            base_staples_mapping = score_placeholders.get(subscription_type)
-            if not base_staples_mapping:
-                raise ValueError(f"Unsupported subscription type: {subscription_type}")
-            print(f"Base staples mapping for subscription {subscription_type}: {base_staples_mapping}")
-
-            # Calculate base staples score
-            base_staples_score = sum(base_staples_mapping[v] for v in staples.values() if v in base_staples_mapping)
-            print(f"Base staples score calculated: {base_staples_score}")
-
-            # Determine the value mapping based on grey categories and subscription type
-            adjustment_factor = (subscription_type - base_staples_score) / grey_categories if grey_categories > 0 else 0
-            print(f"Adjustment factor: {adjustment_factor}")
-
-            if adjustment_factor > 2:
-                mapping_type = "heavy_mapping"
-                value_mapping = {
-                    20: {"many": 6, "a few": 4, "one": 1},
-                    16: {"many": 5, "a few": 3, "one": 1},
-                    12: {"many": 4, "a few": 3, "one": 1},
-                }
-            elif 1 < adjustment_factor <= 2:
-                mapping_type = "base_mapping"
-                value_mapping = score_placeholders
+            # Transformation logic based on your priority order
+            # If the condition is true, the assignment is too large, so skip to the next
+            if many_count * 2 + few_count * 1 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 2, "a few": 1, "one": 1}
+                # Maximize "many" to 2
+                remaining = adjusted_subscription_type - (many_count * 2 + few_count * 1 + one_count * 1)
+                if remaining > 0 and few_count > 0:
+                    # Distribute remaining to "a few" if possible
+                    value_mapping["a few"] = min(2, 1 + remaining // few_count)
+            elif many_count * 2 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 2, "a few": 2, "one": 1}
+                # Maximize "a few" to 2
+                remaining = adjusted_subscription_type - (many_count * 2 + few_count * 2 + one_count * 1)
+                if remaining > 0 and many_count > 0:
+                    # Distribute remaining to "many" if possible
+                    value_mapping["many"] = min(3, 2 + remaining // many_count)
+            elif many_count * 3 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 3, "a few": 2, "one": 1}
+                # Maximize "many" to 3
+                remaining = adjusted_subscription_type - (many_count * 3 + few_count * 2 + one_count * 1)
+                if remaining > 0 and many_count > 0:
+                    value_mapping["many"] = min(4, 3 + remaining // many_count)
+            elif many_count * 4 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 4, "a few": 2, "one": 1}
+                # Maximize "many" to 4
+                remaining = adjusted_subscription_type - (many_count * 4 + few_count * 2 + one_count * 1)
+                if remaining > 0 and many_count > 0:
+                    value_mapping["many"] = min(5, 4 + remaining // many_count)
+            elif many_count * 5 + few_count * 2 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 5, "a few": 2, "one": 1}
+                # Maximize "many" to 5
+                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 2 + one_count * 1)
+                if remaining > 0 and few_count > 0:
+                    value_mapping["a few"] = min(3, 2 + remaining // few_count)
+            elif many_count * 5 + few_count * 3 + one_count * 1 < adjusted_subscription_type:
+                value_mapping = {"many": 5, "a few": 3, "one": 1}
+                # Maximize "a few" to 3
+                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 3 + one_count * 1)
+                if remaining > 0 and many_count > 0:
+                    value_mapping["many"] = min(6, 5 + remaining // many_count)
             else:
-                mapping_type = "light_mapping"
-                value_mapping = {
-                    20: {"many": 4, "a few": 2, "one": 1},
-                    16: {"many": 3, "a few": 2, "one": 1},
-                    12: {"many": 3, "a few": 2, "one": 1},
-                }
-            print(f"Selected mapping type: {mapping_type}")
+                value_mapping = {"many": 5, "a few": 3, "one": 1}
+                # Maximize "many" to 5
+                remaining = adjusted_subscription_type - (many_count * 5 + few_count * 3 + one_count * 1)
+                if remaining < 0:
+                    # If total exceeds, reduce "many" or "a few" to fit
+                    if many_count > 0:
+                        value_mapping["many"] = max(4, (adjusted_subscription_type - few_count * 3 - one_count * 1) // many_count)
+                    elif few_count > 0:
+                        value_mapping["a few"] = max(2, (adjusted_subscription_type - many_count * 5 - one_count * 1) // few_count)
+
             print(f"Value mapping: {value_mapping}")
 
-            # Get the mapping for the given subscription type
-            mapping = value_mapping.get(subscription_type)
-            if not mapping:
-                raise ValueError(f"Unsupported subscription type: {subscription_type}")
-            print(f"Selected mapping for subscription {subscription_type}: {mapping}")
-
             # Apply the mapping to the staples
-            transformed_staples = {k: mapping[v] for k, v in staples.items() if v in mapping}
+            transformed_staples = {k: value_mapping[v] for k, v in staples.items()}
             print(f"Transformed staples: {transformed_staples}")
 
             # Calculate the total value after transformation
             total_value = sum(transformed_staples.values())
             print(f"Total value after transformation: {total_value}")
 
-            # Adjust values if the total exceeds the subscription type
+            # Adjust values if the total exceeds the subscription_type
             if total_value > subscription_type:
                 print(f"Total value ({total_value}) exceeds subscription type ({subscription_type}). Adjusting...")
 
@@ -345,13 +376,14 @@ async def build_starting_box(
                 print(f"Sorted items for adjustment: {sorted_items}")
 
                 for key, value in sorted_items:
+                    if total_value <= subscription_type:
+                        break
                     if value > 1:  # Ensure the value doesn't drop below 1
                         transformed_staples[key] -= 1
-                        total_value -= 1  # Update total value
+                        total_value -= 1
                         print(f"Adjusted {key} from {value} to {transformed_staples[key]}, new total: {total_value}")
-                        if total_value <= subscription_type:
-                            print("Adjustment complete.")
-                            break  # Stop once the total is adjusted
+
+                print("Adjustment complete.")
 
             print(f"Final transformed staples: {transformed_staples}")
             return transformed_staples
@@ -453,7 +485,7 @@ async def build_starting_box(
             matching_snacks = [
                 snack for snack in grouped_snacks
                 if snack["secondaryCategory"] == current_category and
-                   (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                   (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                    snack["form"] in least_used_forms and
                    snack["brand"] in least_used_brands and
                    (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
@@ -466,7 +498,7 @@ async def build_starting_box(
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                       (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                        snack["form"] in least_used_forms and
                        snack["brand"] in least_used_brands and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
@@ -477,7 +509,7 @@ async def build_starting_box(
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                       (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                        snack["form"] in least_used_forms and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
                        priority_condition(snack)  # Added priority condition
@@ -487,7 +519,7 @@ async def build_starting_box(
                 matching_snacks = [
                     snack for snack in grouped_snacks
                     if snack["secondaryCategory"] == current_category and
-                       (secondary_category_increment >= 12 or snack["itemOfMonthBoost"] > 0) and
+                       (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
                        priority_condition(snack)  # Added priority condition
                 ]
@@ -675,14 +707,24 @@ async def build_starting_box(
         print(f'EXTEND 1: {context["month_start_box"]}')
         print("--------------------------------------------------------------------------")
         print("\n")
-        
-        transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"])
+
+        total_repeat_count = sum(item['count'] for item in context["repeat_monthly"])
+        print(f"REPEAT COUNT: {total_repeat_count}") 
+
+        adjusted_subscription_type = context["subscription_type"] - total_repeat_count
+
+        # Check if adjusted_subscription_type is negative
+        if adjusted_subscription_type < 0:
+            print(f"Adjusted subscription type is negative ({adjusted_subscription_type}). Skipping snack selection and proceeding to save.")
+            return  # Exit early to skip to saving
+                
+        transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"], adjusted_subscription_type)
         print(f"Transformed Staples: {transformed_staples}")
         
         # Fetch the safe snacks
         most_recent_snack_ids = await get_most_recent_box(customerID)
         
-        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], context["category_dislikes"], off_cycle, most_recent_snack_ids)
+        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], context["category_dislikes"], off_cycle, most_recent_snack_ids, context["repeat_monthly"])
 
         # Get priority_setting from context
         priority_setting = context.get("priority_setting", 0)  # Default to 0 if not set
@@ -727,9 +769,14 @@ async def build_starting_box(
 
         print(f"Remaining categories to fill: {remaining_categories}")
         
-        count_to_fill = context["subscription_type"] - len(context["month_start_box"])
+        # Calculate running tally of 'count' fields in month_start_box
+        month_start_box_count = sum(item.get('count', 0) for item in context["month_start_box"])
+        print(f"Running tally of count fields in month_start_box: {month_start_box_count}")
 
+        # Calculate count_to_fill using the sum of 'count' fields
+        count_to_fill = context["subscription_type"] - month_start_box_count
         print(f"Count to fill: {count_to_fill}")
+
 
         # Only process remaining categories if count_to_fill is greater than 0
         if count_to_fill > 0:
@@ -738,8 +785,13 @@ async def build_starting_box(
         # CHECK: BOX IS FULL
         if len(context["month_start_box"]) != context["subscription_type"]:
             print(f"EXTEND 3 (REMAINING CATEGORIES): Box still not full: {len(context['month_start_box'])}/{context['subscription_type']}. Adding remaining snacks.")
-            # Recalculate count_to_fill
-            count_to_fill = context["subscription_type"] - len(context["month_start_box"])
+            
+            # RECALCULATE count_to_fill
+            month_start_box_count = sum(item.get('count', 0) for item in context["month_start_box"])
+            print(f"Running tally of count fields in month_start_box: {month_start_box_count}")
+            count_to_fill = context["subscription_type"] - month_start_box_count
+            print(f"Count to fill: {count_to_fill}")
+            
             # Only process remaining categories if count_to_fill is greater than 0
             if count_to_fill > 0:
                 process_remaining_categories(remaining_categories, count_to_fill, grouped_snacks, context, previous_snack_ids)
@@ -753,9 +805,11 @@ async def build_starting_box(
         print("\n")
 
         # NEW: EXTEND 4 (CATCH-ALL)
-        if len(context["month_start_box"]) != context["subscription_type"]:
-            count_to_fill = context["subscription_type"] - len(context["month_start_box"])
-            print(f"EXTEND 4 (CATCH-ALL): Box still not full: {len(context['month_start_box'])}/{context['subscription_type']}. Adding {count_to_fill} snacks with highest total score.")
+        month_start_box_count = sum(item.get('count', 0) for item in context["month_start_box"])
+        if month_start_box_count != context["subscription_type"]:
+            count_to_fill = context["subscription_type"] - month_start_box_count
+            print(f"EXTEND 4 (CATCH-ALL): Box still not full: {month_start_box_count}/{context['subscription_type']}. Adding {count_to_fill} snacks with highest total score.")
+            print("--------------------------------------------------------------------------")
     
             # Get SnackIDs already in the box to avoid duplicates
             current_snack_ids = {item["SnackID"] for item in context["month_start_box"]}
@@ -790,7 +844,8 @@ async def build_starting_box(
         print("--------------------------------------------------------------------------")
         for index, item in enumerate(context["month_start_box"], start=1):
             print(f"{index}: {item}")
-        print(f"Final box size: {len(context['month_start_box'])}/{context['subscription_type']}")
+        month_start_box_count = sum(item.get('count', 0) for item in context["month_start_box"])
+        print(f"Final box size: {month_start_box_count}/{context['subscription_type']}")
 
 # ========================================================================================================================== SAVE
             
