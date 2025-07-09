@@ -22,13 +22,28 @@ class Snack(BaseModel):
     count: int = Field(..., ge=1, description="The count of the snack")
     primaryCategory: str = Field(..., description="The primary category of the snack")
 
+class SnackItem(BaseModel):  # Distinct model for build_starting_box
+    SnackID: str = Field(..., description="The ID of the snack")
+    count: int = Field(..., ge=1, description="The count of the snack")
+    primaryCategory: str = Field(..., description="The primary category of the snack")
+    premium: bool = Field(..., description="Whether the snack is premium")
+
+class BuildStartingBoxRequest(BaseModel):
+    customerID: str
+    new_signup: bool
+    repeat_customer: bool
+    off_cycle: bool
+    is_reset_box: bool = False
+    reset_total: int = 0
+    repeat_monthly: List[SnackItem] = Field(default_factory=list)  # Default to []
+
 
 class Customer(BaseModel):
     customerID: str = Field(default_factory=lambda: str(uuid4()), unique=True)
     firstName: Optional[str]
     lastName: Optional[str]
     phone: Optional[str]
-    email: Optional[EmailStr]
+    email: Optional[str]
     textUpdates: bool = Field(default=False)
     stripeCustomerID: Optional[str]
     stripe_status: Optional[str]
