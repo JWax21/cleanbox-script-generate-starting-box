@@ -35,7 +35,7 @@ class BuildStartingBoxRequest(BaseModel):
     off_cycle: bool
     is_reset_box: bool = False
     reset_total: int = 0
-    repeat_monthly: Optional[List[SnackItem]] = None  # Make repeat_monthly optional
+    repeat_monthly: List[SnackItem] = Field(default_factory=list)  # Default to []
 
 
 class Customer(BaseModel):

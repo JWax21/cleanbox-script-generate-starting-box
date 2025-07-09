@@ -13,10 +13,10 @@ async def build_starting_box(
     off_cycle: bool,
     is_reset_box: bool,
     reset_total: int,
-    repeat_monthly: Optional[List[SnackItem]],  # Make repeat_monthly optional
     monthly_draft_box_collection,
     all_customers_collection,
     all_snacks_collection,
+    repeat_monthly: List[SnackItem] = [],  
 ):
     
     # Convert repeat_monthly to list of dicts if provided
