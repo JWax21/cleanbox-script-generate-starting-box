@@ -83,13 +83,30 @@ async def build_starting_box(
             # Initialize query conditions
             query_conditions = {"replacementOnly": {"$ne": True}}  # Exclude snacks where replacementOnly is true
 
-            # Filter by repeat_monthly SnackIDs if provided
-            if repeat_monthly:
+            # Combine all SnackID exclusions
+            excluded_snack_ids = set()
+
+            # Add repeat_monthly SnackIDs to excluded list
+            if repeat_monthly and isinstance(repeat_monthly, list):
                 print("d. Adding Repeat Monthly SnackIDs to query conditions")
-                # Extract SnackIDs from repeat_monthly array
-                repeat_snack_ids = [item["SnackID"] for item in repeat_monthly]
-                query_conditions["SnackID"] = {"$nin": repeat_snack_ids}
-                
+                repeat_snack_ids = [str(item["SnackID"]).strip().upper() for item in repeat_monthly if isinstance(item, dict) and "SnackID" in item]
+                excluded_snack_ids.update(repeat_snack_ids)
+                print(f"Repeat SnackIDs: {repeat_snack_ids}")
+            else:
+                print("repeat_monthly is empty or invalid")
+
+            # Add most_recent_snack_ids to excluded list
+            if most_recent_snack_ids:
+                print("d. Adding Most Recent SnackID exclusion to query conditions")
+                recent_snack_ids = [str(id).strip().upper() for id in most_recent_snack_ids]
+                excluded_snack_ids.update(recent_snack_ids)
+                print(f"Most Recent SnackIDs: {recent_snack_ids}")
+
+            # Apply combined SnackID filter
+            if excluded_snack_ids:
+                query_conditions["SnackID"] = {"$nin": list(excluded_snack_ids)}
+                print(f"Excluded SnackIDs: {excluded_snack_ids}")
+
             # Filter by allergens if provided
             if allergens:
                 print("a. Adding Allergens to query conditions")
@@ -135,19 +152,25 @@ async def build_starting_box(
             if dislikedCategories:
                 print("c. Adding Disliked Categories to query conditions")
                 query_conditions["primaryCategory"] = {"$nin": dislikedCategories}
-                
+
             # Filter by off-cycle if provided
             if off_cycle:
                 print("c. Adding Off-Cycle to query conditions")
                 query_conditions["$or"] = [{"inStock": True}, {"approved": True}]
 
-            # Filter out snacks with SnackID in most_recent_snack_ids
-            if most_recent_snack_ids:
-                print("d. Adding SnackID exclusion to query conditions")
-                query_conditions["SnackID"] = {"$nin": most_recent_snack_ids}
+            # Log final query conditions
+            print(f"Final query conditions: {query_conditions}")
 
             # Query the collection with the combined filters
             snacks = await all_snacks_collection.find(query_conditions).to_list(length=500)
+
+            # Log returned SnackIDs for debugging
+            returned_snack_ids = [snack["SnackID"] for snack in snacks]
+            print(f"Returned SnackIDs: {returned_snack_ids}")
+
+            # Check if any excluded SnackIDs are in results
+            if excluded_snack_ids and any(snack_id in excluded_snack_ids for snack_id in returned_snack_ids):
+                print(f"Warning: Excluded SnackIDs found in results: {set(returned_snack_ids) & excluded_snack_ids}")
 
             # Print the count of snacks returned
             print(f"e. Number of snacks returned: {len(snacks)}")
