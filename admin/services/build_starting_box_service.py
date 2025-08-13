@@ -894,7 +894,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== SAVE
             
-    async def save_month_start_box(off_cycle):
+    async def save_month_start_box(new_signup):
         print(f'Saving Box: {context["month_start_box"]}')
 
         # MONTH
@@ -906,8 +906,10 @@ async def build_starting_box(
         month_as_int = int(target_date.strftime("%m%y"))
 
         # ORDER STATUS
-        order_status = "Locked" if off_cycle else "Customize"
-        
+        print(f'NEW SIGNUP: {new_signup}')
+        order_status = "firstbox" if new_signup else "Customize"
+
+        print(f'ORDER STATUS: {order_status}')
         
         created_at = datetime.utcnow()
         timestamp = created_at.strftime("%Y%m%d%H%M%S")
@@ -926,6 +928,8 @@ async def build_starting_box(
             "createdAt": created_at,
         }
 
+        
+
         if context["month_start_box"]:
             await monthly_draft_box_collection.insert_one(document)
             print(f"Box saved successfully for customer: {customerID}")
@@ -938,5 +942,5 @@ async def build_starting_box(
     
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box(off_cycle)
-    snacks = await save_month_start_box(off_cycle)  # Capture the snacks field
+    snacks = await save_month_start_box(new_signup)  # Capture the snacks field
     return snacks  # Return the snacks to the endpoint
