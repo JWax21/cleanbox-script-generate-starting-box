@@ -77,7 +77,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== 1. FILTER SNACKS
     
-    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, dislikedCategories=None, off_cycle=False, most_recent_snack_ids=None, repeat_monthly=None):
+    async def fetch_snacks_filtered(allergens=None, vetoedFlavors=None, dislikedCategories=None, off_cycle=False, previous_snack_ids=None, repeat_monthly=None):
         try:
             print("FILTERING SNACKS")
             # Initialize query conditions
@@ -96,9 +96,9 @@ async def build_starting_box(
                 print("repeat_monthly is empty or invalid")
 
             # Add most_recent_snack_ids to excluded list
-            if most_recent_snack_ids:
+            if previous_snack_ids:
                 print("d. Adding Most Recent SnackID exclusion to query conditions")
-                recent_snack_ids = [str(id).strip().upper() for id in most_recent_snack_ids]
+                recent_snack_ids = [str(id).strip().upper() for id in previous_snack_ids]
                 excluded_snack_ids.update(recent_snack_ids)
                 print(f"Most Recent SnackIDs: {recent_snack_ids}")
 
@@ -765,11 +765,14 @@ async def build_starting_box(
                 
         transformed_staples = transform_staples_object(context["staples"], context["subscription_type"], context["category_dislikes"], adjusted_subscription_type)
         print(f"Transformed Staples: {transformed_staples}")
+
+        # GET PREVIOUS SNACK IDS (PENALTY)
+        previous_snack_ids = await get_previous_snack_ids(customerID)
         
         # Fetch the safe snacks
         most_recent_snack_ids = await get_most_recent_box(customerID)
         
-        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], context["category_dislikes"], off_cycle, most_recent_snack_ids, context["repeat_monthly"])
+        safe_snacks = await fetch_snacks_filtered(context["customer_allergens"], context["vetoed_flavors"], context["category_dislikes"], off_cycle, previous_snack_ids, context["repeat_monthly"])
 
         # Get priority_setting from context
         priority_setting = context.get("priority_setting", 0)  # Default to 0 if not set
@@ -778,9 +781,6 @@ async def build_starting_box(
         # Validate the structure of safe_snacks
         if not isinstance(safe_snacks, list):
             raise ValueError("safe_snacks must be a list.")
-
-        # GET PREVIOUS SNACK IDS (PENALTY)
-        previous_snack_ids = await get_previous_snack_ids(customerID)
         
         # CALCULATE SCORE
         sorted_safe_snacks = sorted(
@@ -894,7 +894,7 @@ async def build_starting_box(
 
 # ========================================================================================================================== SAVE
             
-    async def save_month_start_box(off_cycle):
+    async def save_month_start_box(new_signup):
         print(f'Saving Box: {context["month_start_box"]}')
 
         # MONTH
@@ -906,8 +906,10 @@ async def build_starting_box(
         month_as_int = int(target_date.strftime("%m%y"))
 
         # ORDER STATUS
-        order_status = "Locked" if off_cycle else "Customize"
-        
+        print(f'NEW SIGNUP: {new_signup}')
+        order_status = "firstbox" if new_signup else "Customize"
+
+        print(f'ORDER STATUS: {order_status}')
         
         created_at = datetime.utcnow()
         timestamp = created_at.strftime("%Y%m%d%H%M%S")
@@ -926,6 +928,8 @@ async def build_starting_box(
             "createdAt": created_at,
         }
 
+        
+
         if context["month_start_box"]:
             await monthly_draft_box_collection.insert_one(document)
             print(f"Box saved successfully for customer: {customerID}")
@@ -938,5 +942,5 @@ async def build_starting_box(
     
     await get_customer_by_customerID(customerID, is_reset_box, reset_total)
     await build_month_start_box(off_cycle)
-    snacks = await save_month_start_box(off_cycle)  # Capture the snacks field
+    snacks = await save_month_start_box(new_signup)  # Capture the snacks field
     return snacks  # Return the snacks to the endpoint

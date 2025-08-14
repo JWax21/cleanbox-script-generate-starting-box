@@ -9,8 +9,11 @@ app = FastAPI()
 
 allowed_origins = [
     "https://88560556-a900-47e6-8007-e359b7ed3fd3-00-l5rqe8vdo9vu.picard.replit.dev",
+    "https://15b32817-5faa-4f7d-b530-17ba4d07f43f-00-89dgnqdk4hau.spock.replit.dev",
+    "https://f02c4200-944b-4465-84db-1c5d1983cbb6-00-86bbev4zb62b.kirk.replit.dev",
     "https://www.cleanboxsnacks.com",
     "https://staging.cleanboxsnacks.com",
+    "https://cleanbox-web-app-v2-git-staging-clean-box.vercel.app",
     "http://localhost:5173",
 ]
 
