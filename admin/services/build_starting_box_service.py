@@ -535,7 +535,9 @@ async def build_starting_box(
                    snack["brand"] in least_used_brands and
                    (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
                    all(tag in least_used_flavor_tags for tag in snack.get("flavorTags", [])) and
-                   priority_condition(snack)  # Added priority condition
+                   snack["inStock"] is True and  # Added inStock condition
+                   snack["active"] is True and   # Added active condition
+                   priority_condition(snack)     # Added priority condition
             ]
 
             # Relax criteria step-by-step if no matches
@@ -547,7 +549,9 @@ async def build_starting_box(
                        snack["form"] in least_used_forms and
                        snack["brand"] in least_used_brands and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
-                       priority_condition(snack)  # Added priority condition
+                       snack["inStock"] is True and  # Added inStock condition
+                       snack["active"] is True and   # Added active condition
+                       priority_condition(snack)     # Added priority condition
                 ]
 
             if not matching_snacks:
@@ -557,7 +561,9 @@ async def build_starting_box(
                        (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                        snack["form"] in least_used_forms and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
-                       priority_condition(snack)  # Added priority condition
+                       snack["inStock"] is True and  # Added inStock condition
+                       snack["active"] is True and   # Added active condition
+                       priority_condition(snack)     # Added priority condition
                 ]
 
             if not matching_snacks:
@@ -566,7 +572,9 @@ async def build_starting_box(
                     if snack["secondaryCategory"] == current_category and
                        (secondary_category_increment >= 10 or snack["itemOfMonthBoost"] > 0) and
                        (secondary_category_increment >= 12 or snack["SnackID"] not in previous_snack_ids) and
-                       priority_condition(snack)  # Added priority condition
+                       snack["inStock"] is True and  # Added inStock condition
+                       snack["active"] is True and   # Added active condition
+                       priority_condition(snack)     # Added priority condition
                 ]
 
             # If still no matches, increment secondary category and continue
@@ -588,9 +596,9 @@ async def build_starting_box(
                     f"form: {snack.get('form')}, "
                     f"brand: {snack.get('brand')}, "
                     f"flavor: {snack.get('flavor')}, "
-                    f"protein: {snack.get('protein', 'N/A')}, "  # Added for debugging
-                    f"carbs: {snack.get('carbs', 'N/A')}, "    # Added for debugging
-                    f"calories: {snack.get('calories', 'N/A')}" # Added for debugging
+                    f"protein: {snack.get('protein', 'N/A')}, "
+                    f"carbs: {snack.get('carbs', 'N/A')}, "
+                    f"calories: {snack.get('calories', 'N/A')}"
                 )
 
             selected_snack = matching_snacks[0]
@@ -859,10 +867,12 @@ async def build_starting_box(
             # Get SnackIDs already in the box to avoid duplicates
             current_snack_ids = {item["SnackID"] for item in context["month_start_box"]}
     
-            # Filter sorted_safe_snacks to exclude already selected snacks
+            # Filter sorted_safe_snacks to exclude already selected snacks and ensure inStock and active are True
             available_snacks = [
                 snack for snack in sorted_safe_snacks 
-                if snack["SnackID"] not in current_snack_ids
+                if snack["SnackID"] not in current_snack_ids and
+                   snack["inStock"] is True and  # Added inStock condition
+                   snack["active"] is True       # Added active condition
             ]
     
             print(f"Available snacks for EXTEND 4: {len(available_snacks)}")
